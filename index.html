@@ -397,7 +397,6 @@ function buildBodyText() {
   }
   body += '\n';
   if (prestart) body += '+ Prestart meeting: +15 min\n';
-  body += '- Smoko / lunch (compulsory): -30 min\n';
   var net = totalMins - 30 + (prestart ? 15 : 0);
   if (net < 0) net = 0;
   body += '\nTotal Payable Hours: ' + minsToLabel(net);
