@@ -25,15 +25,17 @@ body{font-family:Arial,sans-serif;font-size:14px;color:var(--text);background:#f
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;}
 .row1{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:8px;}
 label.lbl{display:block;font-size:11px;font-weight:bold;color:var(--subtle);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;}
-input[type=text],input[type=date],input[type=time],select{width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:4px;font-size:13px;font-family:Arial,sans-serif;color:var(--text);background:#fff;outline:none;}
-input:focus,select:focus{border-color:var(--accent);}
+input[type=text],input[type=date],input[type=time],select,textarea{width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:4px;font-size:13px;font-family:Arial,sans-serif;color:var(--text);background:#fff;outline:none;}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);}
+select.invalid{border-color:#e74c3c;background:#fff5f5;}
+textarea{resize:vertical;min-height:80px;}
 .combo{display:flex;gap:6px;}
 .combo select{flex:1;}
 .combo input[type=text]{flex:1;display:none;}
 .edit-btn{background:var(--light);border:1px solid var(--accent);border-radius:4px;color:var(--navy);cursor:pointer;font-size:11px;font-weight:bold;padding:0 9px;white-space:nowrap;}
 .edit-btn:hover{background:var(--accent);color:#fff;}
 .hint{font-size:10px;color:var(--subtle);margin-top:2px;}
-
+.hint.err{color:#e74c3c;}
 .pre-wrap{display:flex;align-items:center;gap:10px;padding:13px 15px;background:#fff;border:1px solid var(--border);border-radius:6px;cursor:pointer;margin-bottom:14px;}
 .pre-wrap:hover{border-color:var(--accent);}
 .pre-wrap input[type=checkbox]{width:17px;height:17px;accent-color:var(--navy);cursor:pointer;}
@@ -46,15 +48,17 @@ input:focus,select:focus{border-color:var(--accent);}
 .pv-dur{color:var(--subtle);}
 .pv-hr{border:none;border-top:1px solid var(--border);margin:6px 0;}
 .pv-total{display:flex;justify-content:space-between;font-weight:bold;color:var(--navy);font-size:14px;margin-top:3px;}
-.pv-ded{color:#c0392b;font-size:12px;display:flex;justify-content:space-between;}
 .pv-add{color:#2e7d32;font-size:12px;display:flex;justify-content:space-between;}
 .pv-empty{color:#ccc;font-style:italic;text-align:center;padding:10px 0;}
 .pv-warn{background:#fff3cd;border:1px solid #ffc107;border-radius:4px;color:#856404;font-size:11px;margin-top:6px;padding:5px 9px;}
+.pv-invalid{background:#fff0f0;border:1px solid #e74c3c;border-radius:4px;color:#c0392b;font-size:11px;margin-top:6px;padding:5px 9px;}
 .actions{display:flex;gap:10px;margin-top:18px;}
 .btn-email{flex:1;background:var(--navy);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:14px;font-weight:bold;padding:12px;}
 .btn-email:hover{background:#232c7a;}
-.btn-docx{flex:1;background:#fff;border:2px solid var(--navy);border-radius:6px;color:var(--navy);cursor:pointer;font-size:14px;font-weight:bold;padding:12px;}
-.btn-docx:hover{background:var(--navy);color:#fff;}
+.btn-email:disabled{background:#aaa;cursor:not-allowed;}
+.btn-pdf{flex:1;background:#fff;border:2px solid var(--navy);border-radius:6px;color:var(--navy);cursor:pointer;font-size:14px;font-weight:bold;padding:12px;}
+.btn-pdf:hover{background:var(--navy);color:#fff;}
+.btn-pdf:disabled{border-color:#aaa;color:#aaa;cursor:not-allowed;}
 @media(max-width:540px){.row2{grid-template-columns:1fr;}.actions{flex-direction:column;}.hdr img{height:36px;}}
 </style>
 </head>
@@ -85,17 +89,27 @@ input:focus,select:focus{border-color:var(--accent);}
   </label>
 
   <div class="card">
+    <div class="card-title">Notes</div>
+    <div class="row1">
+      <div>
+        <label class="lbl" for="notes">Additional notes (optional)</label>
+        <textarea id="notes" placeholder="Site observations, delays, instructions received..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-title">Timesheet Preview</div>
     <div class="pvbox" id="preview"><div class="pv-empty">Add a project to see your timesheet.</div></div>
   </div>
 
   <div class="actions">
     <button class="btn-email" id="btn-email">Send via Email</button>
-    <button class="btn-docx" id="btn-docx">Save as Word Doc</button>
+    <button class="btn-pdf" id="btn-pdf">Save as PDF</button>
   </div>
 
 </div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/docx/7.8.2/docx.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 (function() {
 
@@ -128,120 +142,16 @@ function buildOptions() {
   return s;
 }
 
-function addEntry() {
-  entryCount++;
-  var idx = entryCount;
-  var existingCount = document.querySelectorAll('.entry').length;
-  var isStripe = existingCount % 2 !== 0;
-  var defStart = (existingCount === 0) ? '07:00' : '';
-  var defEnd   = (existingCount === 0) ? '15:00' : '';
-
-  var div = document.createElement('div');
-  div.className = 'entry' + (isStripe ? ' stripe' : '');
-  div.id = 'entry-' + idx;
-
-  var html = '';
-  html += '<div class="entry-hdr">';
-  html += '  <span class="entry-num">Entry ' + idx + '</span>';
-  html += '  <button class="rm-btn" data-idx="' + idx + '">&times;</button>';
-  html += '</div>';
-  html += '<div class="row1"><div>';
-  html += '  <label class="lbl">Project / Activity</label>';
-  html += '  <div class="combo" id="combo-' + idx + '">';
-  html += '    <select id="sel-' + idx + '">' + buildOptions() + '</select>';
-  html += '    <input type="text" id="man-' + idx + '" placeholder="Type activity...">';
-  html += '    <button class="edit-btn" data-toggle="' + idx + '">Edit</button>';
-  html += '  </div>';
-  html += '</div></div>';
-  html += '<div class="row2">';
-  html += '  <div>';
-  html += '    <label class="lbl">Start Time</label>';
-  html += '    <input type="time" id="start-' + idx + '" value="' + defStart + '" min="07:00" max="23:59">';
-  html += '    <div class="hint">Earliest: 07:00</div>';
-  html += '  </div>';
-  html += '  <div>';
-  html += '    <label class="lbl">End Time</label>';
-  html += '    <input type="time" id="end-' + idx + '" value="' + defEnd + '" min="07:00" max="23:59">';
-  html += '    <div class="hint">Latest: 23:59</div>';
-  html += '  </div>';
-  html += '</div>';
-
-  div.innerHTML = html;
-  document.getElementById('entries').appendChild(div);
-
-  // Wire up events after insertion
-  var sel = document.getElementById('sel-' + idx);
-  var man = document.getElementById('man-' + idx);
-  var startIn = document.getElementById('start-' + idx);
-  var endIn   = document.getElementById('end-' + idx);
-
-  sel.addEventListener('change', function() {
-    if (sel.value === '__manual__') {
-      sel.style.display = 'none';
-      man.style.display = 'block';
-      man.focus();
-    }
-    updatePreview();
-  });
-  man.addEventListener('input', updatePreview);
-  function setMaxAttrs() {
-    var mx = getMaxTime();
-    startIn.setAttribute('max', mx);
-    endIn.setAttribute('max', mx);
-  }
-  setMaxAttrs();
-  startIn.addEventListener('change', function() { clampTime(startIn); updatePreview(); });
-  endIn.addEventListener('change',   function() { clampTime(endIn);   updatePreview(); });
-
-  div.querySelector('.rm-btn').addEventListener('click', function() {
-    removeEntry(idx);
-  });
-  div.querySelector('.edit-btn').addEventListener('click', function() {
-    toggleManual(idx);
-  });
-
-  restripe();
-  updatePreview();
-}
-
-function removeEntry(idx) {
-  var el = document.getElementById('entry-' + idx);
-  if (el) el.parentNode.removeChild(el);
-  restripe();
-  updatePreview();
-}
-
-function toggleManual(idx) {
-  var sel = document.getElementById('sel-' + idx);
-  var man = document.getElementById('man-' + idx);
-  if (!sel || !man) return;
-  if (sel.style.display === 'none') {
-    sel.style.display = '';
-    man.style.display = 'none';
-    sel.value = '';
-  } else {
-    sel.style.display = 'none';
-    man.style.display = 'block';
-    man.focus();
-  }
-  updatePreview();
-}
-
-function restripe() {
-  var blocks = document.querySelectorAll('.entry');
-  for (var i = 0; i < blocks.length; i++) {
-    if (i % 2 === 0) { blocks[i].classList.remove('stripe'); }
-    else             { blocks[i].classList.add('stripe'); }
-  }
+function today() {
+  return new Date().toISOString().split('T')[0];
 }
 
 function getMaxTime() {
   var dateVal = document.getElementById('gdate').value;
-  var today = new Date().toISOString().split('T')[0];
-  if (dateVal === today) {
+  if (dateVal === today()) {
     var now = new Date();
-    var hh = String(now.getHours()).padStart(2, '0');
-    var mm = String(now.getMinutes()).padStart(2, '0');
+    var hh = String(now.getHours()).padStart(2,'0');
+    var mm = String(now.getMinutes()).padStart(2,'0');
     return hh + ':' + mm;
   }
   return '23:59';
@@ -261,24 +171,162 @@ function applyMaxToAll() {
   var blocks = document.querySelectorAll('.entry');
   for (var i = 0; i < blocks.length; i++) {
     var id = blocks[i].id.replace('entry-', '');
-    var startIn = document.getElementById('start-' + id);
-    var endIn   = document.getElementById('end-' + id);
-    if (startIn && startIn.value > maxTime) startIn.value = maxTime;
-    if (endIn   && endIn.value   > maxTime) endIn.value   = maxTime;
+    var s = document.getElementById('start-' + id);
+    var e = document.getElementById('end-' + id);
+    if (s && s.value > maxTime) s.value = maxTime;
+    if (e && e.value > maxTime) e.value = maxTime;
   }
   updatePreview();
 }
 
+function addEntry() {
+  entryCount++;
+  var idx = entryCount;
+  var existingCount = document.querySelectorAll('.entry').length;
+  var isStripe = existingCount % 2 !== 0;
+  var defStart = (existingCount === 0) ? '07:00' : '';
+  var defEnd   = (existingCount === 0) ? '15:00' : '';
+  var maxTime  = getMaxTime();
+  if (defEnd > maxTime) defEnd = maxTime;
+  if (defStart > maxTime) defStart = maxTime;
+
+  var div = document.createElement('div');
+  div.className = 'entry' + (isStripe ? ' stripe' : '');
+  div.id = 'entry-' + idx;
+
+  var h = '';
+  h += '<div class="entry-hdr">';
+  h += '  <span class="entry-num">Entry ' + idx + '</span>';
+  h += '  <button class="rm-btn" data-idx="' + idx + '">&times;</button>';
+  h += '</div>';
+  h += '<div class="row1"><div>';
+  h += '  <label class="lbl">Project / Activity</label>';
+  h += '  <div class="combo" id="combo-' + idx + '">';
+  h += '    <select id="sel-' + idx + '" class="invalid">' + buildOptions() + '</select>';
+  h += '    <input type="text" id="man-' + idx + '" placeholder="Type activity...">';
+  h += '    <button class="edit-btn" data-toggle="' + idx + '">Edit</button>';
+  h += '  </div>';
+  h += '  <div class="hint err" id="proj-err-' + idx + '">Please select a project</div>';
+  h += '</div></div>';
+  h += '<div class="row2">';
+  h += '  <div>';
+  h += '    <label class="lbl">Start Time</label>';
+  h += '    <input type="time" id="start-' + idx + '" value="' + defStart + '" min="07:00" max="' + maxTime + '">';
+  h += '    <div class="hint">Earliest: 07:00</div>';
+  h += '  </div>';
+  h += '  <div>';
+  h += '    <label class="lbl">End Time</label>';
+  h += '    <input type="time" id="end-' + idx + '" value="' + defEnd + '" min="07:00" max="' + maxTime + '">';
+  h += '    <div class="hint">Latest: ' + maxTime + '</div>';
+  h += '  </div>';
+  h += '</div>';
+
+  div.innerHTML = h;
+  document.getElementById('entries').appendChild(div);
+
+  var sel    = document.getElementById('sel-' + idx);
+  var man    = document.getElementById('man-' + idx);
+  var startIn = document.getElementById('start-' + idx);
+  var endIn   = document.getElementById('end-' + idx);
+  var projErr = document.getElementById('proj-err-' + idx);
+
+  sel.addEventListener('change', function() {
+    if (sel.value === '__manual__') {
+      sel.style.display = 'none';
+      man.style.display = 'block';
+      man.focus();
+    }
+    validateProject(idx);
+    updatePreview();
+  });
+  man.addEventListener('input', function() {
+    validateProject(idx);
+    updatePreview();
+  });
+  startIn.addEventListener('change', function() { clampTime(startIn); updatePreview(); });
+  endIn.addEventListener('change',   function() { clampTime(endIn);   updatePreview(); });
+
+  div.querySelector('.rm-btn').addEventListener('click', function() { removeEntry(idx); });
+  div.querySelector('.edit-btn').addEventListener('click', function() { toggleManual(idx); });
+
+  restripe();
+  updateButtons();
+  updatePreview();
+}
+
+function validateProject(idx) {
+  var sel    = document.getElementById('sel-' + idx);
+  var man    = document.getElementById('man-' + idx);
+  var err    = document.getElementById('proj-err-' + idx);
+  if (!sel) return true;
+  var hasVal = false;
+  if (sel.style.display === 'none') {
+    hasVal = man && man.value.trim().length > 0;
+    if (man) { man.style.border = hasVal ? '' : '1px solid #e74c3c'; }
+  } else {
+    hasVal = sel.value !== '' && sel.value !== '__manual__';
+    sel.classList.toggle('invalid', !hasVal);
+  }
+  if (err) err.style.display = hasVal ? 'none' : 'block';
+  return hasVal;
+}
+
+function allProjectsValid() {
+  var blocks = document.querySelectorAll('.entry');
+  for (var i = 0; i < blocks.length; i++) {
+    var id = blocks[i].id.replace('entry-', '');
+    if (!validateProject(id)) return false;
+  }
+  return true;
+}
+
+function updateButtons() {
+  var valid = allProjectsValid() && document.querySelectorAll('.entry').length > 0;
+  document.getElementById('btn-email').disabled = !valid;
+  document.getElementById('btn-pdf').disabled = !valid;
+}
+
+function removeEntry(idx) {
+  var el = document.getElementById('entry-' + idx);
+  if (el) el.parentNode.removeChild(el);
+  restripe();
+  updateButtons();
+  updatePreview();
+}
+
+function toggleManual(idx) {
+  var sel = document.getElementById('sel-' + idx);
+  var man = document.getElementById('man-' + idx);
+  if (!sel || !man) return;
+  if (sel.style.display === 'none') {
+    sel.style.display = '';
+    man.style.display = 'none';
+    sel.value = '';
+  } else {
+    sel.style.display = 'none';
+    man.style.display = 'block';
+    man.focus();
+  }
+  validateProject(idx);
+  updatePreview();
+}
+
+function restripe() {
+  var blocks = document.querySelectorAll('.entry');
+  for (var i = 0; i < blocks.length; i++) {
+    blocks[i].classList.toggle('stripe', i % 2 !== 0);
+  }
+}
+
 function timeToMins(t) {
   if (!t) return null;
-  var parts = t.split(':');
-  return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+  var p = t.split(':');
+  return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
 }
 
 function minsToLabel(m) {
   if (m === null || m < 0) return '0 min';
-  var h = Math.floor(m / 60);
-  var min = m % 60;
+  var h = Math.floor(m / 60), min = m % 60;
   if (h === 0) return min + ' min';
   if (min === 0) return h + ' hr' + (h !== 1 ? 's' : '');
   return h + ' hr' + (h !== 1 ? 's' : '') + ' ' + min + ' min';
@@ -286,9 +334,7 @@ function minsToLabel(m) {
 
 function fmtTime(t) {
   if (!t) return '';
-  var parts = t.split(':');
-  var h = parseInt(parts[0], 10);
-  var m = parseInt(parts[1], 10);
+  var p = t.split(':'), h = parseInt(p[0], 10), m = parseInt(p[1], 10);
   var ampm = h < 12 ? 'am' : 'pm';
   var h12 = h === 0 ? 12 : (h > 12 ? h - 12 : h);
   return h12 + (m > 0 ? ':' + (m < 10 ? '0' + m : m) : '') + ampm;
@@ -301,6 +347,13 @@ function getLabel(idx) {
   if (sel.style.display === 'none') return man.value.trim();
   if (sel.value && sel.value !== '__manual__') return sel.options[sel.selectedIndex].text;
   return '';
+}
+
+function getFirstProject() {
+  var blocks = document.querySelectorAll('.entry');
+  if (blocks.length === 0) return '';
+  var id = blocks[0].id.replace('entry-', '');
+  return getLabel(id);
 }
 
 function getEntries() {
@@ -321,24 +374,32 @@ function getEntries() {
   return result;
 }
 
+function calcNet(entries, prestart) {
+  var total = 0;
+  for (var i = 0; i < entries.length; i++) {
+    if (entries[i].dur !== null && entries[i].dur > 0) total += entries[i].dur;
+  }
+  var net = total - 30 + (prestart ? 15 : 0);
+  return net < 0 ? 0 : net;
+}
+
 function updatePreview() {
   var box = document.getElementById('preview');
   var entries = getEntries();
   var prestart = document.getElementById('prestart').checked;
-
   var meaningful = entries.filter(function(e) { return e.label || e.start || e.end; });
+
   if (meaningful.length === 0) {
     box.innerHTML = '<div class="pv-empty">Add a project to see your timesheet.</div>';
     return;
   }
 
-  var totalMins = 0;
-  var hasOverlap = false;
-  var intervals = [];
+  var totalMins = 0, hasOverlap = false, hasInvalidProject = false, intervals = [];
   var html = '';
 
   for (var i = 0; i < meaningful.length; i++) {
     var e = meaningful[i];
+    if (!e.label) hasInvalidProject = true;
     var invalid = (e.dur !== null && e.dur <= 0);
     var timeStr = '';
     if (e.start && e.end) timeStr = fmtTime(e.start) + ' to ' + fmtTime(e.end);
@@ -353,226 +414,249 @@ function updatePreview() {
     if (e.dur !== null && e.dur > 0) totalMins += e.dur;
 
     var durTxt = invalid ? '<span style="color:#e74c3c">check times</span>' : (e.dur !== null ? minsToLabel(e.dur) : '');
-    html += '<div class="pv-row">';
-    html += '<span><span class="pv-loc">' + (e.label || '(no project)') + '</span>';
+    html += '<div class="pv-row"><span><span class="pv-loc">' + (e.label || '<em style="color:#e74c3c">no project selected</em>') + '</span>';
     if (timeStr) html += ' &mdash; ' + timeStr;
     html += '</span><span class="pv-dur">' + durTxt + '</span></div>';
   }
 
   html += '<hr class="pv-hr">';
-  var prestartMins = prestart ? 15 : 0;
-  var net = totalMins - 30 + prestartMins;
-  if (net < 0) net = 0;
-
+  var net = calcNet(meaningful, prestart);
   if (prestart) html += '<div class="pv-add"><span>+ Prestart meeting</span><span>+15 min</span></div>';
-
   html += '<div class="pv-total"><span>Total Payable Hours</span><span>' + minsToLabel(net) + '</span></div>';
+
+  var notes = document.getElementById('notes').value.trim();
+  if (notes) {
+    html += '<hr class="pv-hr"><div style="font-size:12px;color:var(--subtle);margin-top:4px;"><strong style="color:var(--navy)">Notes:</strong> ' + notes.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>';
+  }
+
   if (hasOverlap) html += '<div class="pv-warn">Warning: some time periods overlap.</div>';
+  if (hasInvalidProject) html += '<div class="pv-invalid">Please select a project for all entries before sending.</div>';
 
   box.innerHTML = html;
+  updateButtons();
 }
 
-function buildBodyText() {
+function getDateStr(long) {
   var dateVal = document.getElementById('gdate').value;
-  var dateStr = '';
-  if (dateVal) {
-    var d = new Date(dateVal + 'T12:00:00');
-    dateStr = d.toLocaleDateString('en-AU', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
-  }
+  if (!dateVal) return '';
+  var d = new Date(dateVal + 'T12:00:00');
+  if (long) return d.toLocaleDateString('en-AU', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  return d.toLocaleDateString('en-AU');
+}
+
+function buildEmailBody() {
   var entries = getEntries().filter(function(e){ return e.label || e.start || e.end; });
   var prestart = document.getElementById('prestart').checked;
-  var body = 'SIMMONS CIVIL CONTRACTING\nDAILY DIARY\n';
+  var notes = document.getElementById('notes').value.trim();
+  var dateStr = getDateStr(true);
+  var body = 'SIMMONS CIVIL CONTRACTING\nTIMESHEET\n';
   if (dateStr) body += 'Date: ' + dateStr + '\n';
   body += '\n';
-  var totalMins = 0;
   for (var i = 0; i < entries.length; i++) {
     var e = entries[i];
     var timeStr = (e.start && e.end) ? (fmtTime(e.start) + ' to ' + fmtTime(e.end)) : '';
-    var durStr  = (e.dur !== null && e.dur > 0) ? minsToLabel(e.dur) : '';
-    if (e.dur !== null && e.dur > 0) totalMins += e.dur;
+    var durStr = (e.dur !== null && e.dur > 0) ? minsToLabel(e.dur) : '';
     body += (e.label || '(no project)');
     if (timeStr) body += ' - ' + timeStr;
-    if (durStr)  body += ' = ' + durStr;
+    if (durStr) body += ' = ' + durStr;
     body += '\n';
   }
   body += '\n';
   if (prestart) body += '+ Prestart meeting: +15 min\n';
-  var net = totalMins - 30 + (prestart ? 15 : 0);
-  if (net < 0) net = 0;
-  body += '\nTotal Payable Hours: ' + minsToLabel(net);
+  var net = calcNet(entries, prestart);
+  body += 'Total Payable Hours: ' + minsToLabel(net);
+  if (notes) body += '\n\nNotes:\n' + notes;
   return body;
 }
 
 function sendEmail() {
-  var body = buildBodyText();
-  var dateVal = document.getElementById('gdate').value;
-  var dateStr = dateVal ? new Date(dateVal + 'T12:00:00').toLocaleDateString('en-AU') : '';
-  var subject = 'Timesheet' + (dateStr ? ' - ' + dateStr : '');
-
-  // Open a small overlay with copy-ready content and mailto link
-  var overlay = document.createElement('div');
-  overlay.id = 'email-overlay';
-  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
-
-  var box = document.createElement('div');
-  box.style.cssText = 'background:#fff;border-radius:8px;padding:24px;max-width:520px;width:100%;font-family:Arial,sans-serif;';
-
-  var titleEl = document.createElement('div');
-  titleEl.style.cssText = 'font-size:15px;font-weight:bold;color:#2D3691;margin-bottom:4px;';
-  titleEl.textContent = 'Send Timesheet';
-
-  var toEl = document.createElement('div');
-  toEl.style.cssText = 'font-size:12px;color:#595959;margin-bottom:12px;';
-  toEl.textContent = 'To: timesheets@simmonscivil.com.au';
-
-  var subEl = document.createElement('div');
-  subEl.style.cssText = 'font-size:12px;color:#595959;margin-bottom:8px;';
-  subEl.textContent = 'Subject: ' + subject;
-
-  var ta = document.createElement('textarea');
-  ta.value = body;
-  ta.readOnly = true;
-  ta.style.cssText = 'width:100%;height:200px;border:1px solid #ccc;border-radius:4px;padding:10px;font-size:12px;font-family:Arial,sans-serif;color:#444;background:#fafafa;resize:none;margin-bottom:12px;';
-
-  var btnRow = document.createElement('div');
-  btnRow.style.cssText = 'display:flex;gap:10px;';
-
-  var openBtn = document.createElement('a');
-  openBtn.href = 'mailto:timesheets@simmonscivil.com.au?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
-  openBtn.style.cssText = 'flex:1;background:#2D3691;color:#fff;border:none;border-radius:6px;padding:11px;text-align:center;font-size:13px;font-weight:bold;text-decoration:none;display:block;';
-  openBtn.textContent = 'Open in Mail App';
-
-  var closeBtn = document.createElement('button');
-  closeBtn.textContent = 'Close';
-  closeBtn.style.cssText = 'flex:1;background:#fff;color:#2D3691;border:2px solid #2D3691;border-radius:6px;padding:11px;font-size:13px;font-weight:bold;cursor:pointer;';
-  closeBtn.addEventListener('click', function() { document.body.removeChild(overlay); });
-
-  btnRow.appendChild(openBtn);
-  btnRow.appendChild(closeBtn);
-  box.appendChild(titleEl);
-  box.appendChild(toEl);
-  box.appendChild(subEl);
-  box.appendChild(ta);
-  box.appendChild(btnRow);
-  overlay.appendChild(box);
-  overlay.addEventListener('click', function(e) { if (e.target === overlay) document.body.removeChild(overlay); });
-  document.body.appendChild(overlay);
+  if (!allProjectsValid()) return;
+  var body = buildEmailBody();
+  var proj = getFirstProject();
+  var subject = 'Timesheet for ' + (proj || 'SCC');
+  // First trigger PDF download
+  savePDF(true);
+  // Then open mail client after short delay to allow PDF to initiate
+  setTimeout(function() {
+    window.location.href = 'mailto:timesheets@simmonscivil.com.au'
+      + '?subject=' + encodeURIComponent(subject)
+      + '&body=' + encodeURIComponent(body);
+  }, 500);
 }
 
-function saveDocx() {
-  if (typeof docx === 'undefined') {
-    alert('Word library still loading. Please try again in a moment.');
-    return;
-  }
-  var D = docx;
-  var CONTENT_WIDTH = 9638;
-  var dateVal = document.getElementById('gdate').value;
-  var dateStr = dateVal
-    ? new Date(dateVal + 'T12:00:00').toLocaleDateString('en-AU', { weekday:'long', year:'numeric', month:'long', day:'numeric' })
-    : 'Date not set';
+function savePDF(silent) {
+  if (!allProjectsValid() && !silent) return;
+  var jsPDF = window.jspdf ? window.jspdf.jsPDF : (window.jsPDF);
+  if (!jsPDF) { alert('PDF library still loading. Please try again.'); return; }
+
   var entries = getEntries().filter(function(e){ return e.label || e.start || e.end; });
   var prestart = document.getElementById('prestart').checked;
-  var logoBytes = Uint8Array.from(atob(LOGO_B64), function(c){ return c.charCodeAt(0); });
+  var notes = document.getElementById('notes').value.trim();
+  var dateStr = getDateStr(true);
+  var proj = getFirstProject();
 
-  var cb = { style: D.BorderStyle.SINGLE, size: 1, color: 'CCCCCC' };
-  var borders = { top: cb, bottom: cb, left: cb, right: cb };
-  var cm = { top: 80, bottom: 80, left: 120, right: 120 };
+  var doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  var pageW = 210, marginL = 20, marginR = 20, contentW = pageW - marginL - marginR;
+  var y = 20;
 
-  function hCell(text, w) {
-    return new D.TableCell({ borders: borders, width: { size: w, type: D.WidthType.DXA },
-      shading: { fill: 'D6EEF9', type: D.ShadingType.CLEAR }, margins: cm, verticalAlign: D.VerticalAlign.CENTER,
-      children: [new D.Paragraph({ children: [new D.TextRun({ text: text, bold: true, color: '2D3691', size: 18, font: 'Arial' })] })] });
-  }
-  function dCell(text, w, shade) {
-    return new D.TableCell({ borders: borders, width: { size: w, type: D.WidthType.DXA },
-      shading: { fill: shade, type: D.ShadingType.CLEAR }, margins: cm, verticalAlign: D.VerticalAlign.CENTER,
-      children: [new D.Paragraph({ children: [new D.TextRun({ text: String(text || ''), size: 18, font: 'Arial', color: '444444' })] })] });
-  }
+  // Logo
+  try {
+    doc.addImage('data:image/png;base64,' + LOGO_B64, 'PNG', marginL, y, 40, 15);
+  } catch(e) {}
 
-  var totalMins = 0;
-  var dataRows = [];
+  // CONFIDENTIAL top right
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(45, 54, 145);
+  doc.text('CONFIDENTIAL', pageW - marginR, y + 10, { align: 'right' });
+
+  y += 18;
+  // Header rule (accent blue)
+  doc.setDrawColor(41, 172, 228);
+  doc.setLineWidth(0.8);
+  doc.line(marginL, y, pageW - marginR, y);
+  y += 8;
+
+  // Title
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(45, 54, 145);
+  doc.text('TIMESHEET', marginL, y);
+  y += 6;
+
+  // Date subtitle
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(89, 89, 89);
+  doc.text(dateStr || 'Date not set', marginL, y);
+  y += 3;
+
+  // Thin rule
+  doc.setDrawColor(204, 204, 204);
+  doc.setLineWidth(0.3);
+  doc.line(marginL, y + 2, pageW - marginR, y + 2);
+  y += 8;
+
+  // Table header
+  var col1 = contentW * 0.54, col2 = contentW * 0.26, col3 = contentW * 0.20;
+  var rowH = 7;
+
+  // Header row fill
+  doc.setFillColor(214, 238, 249);
+  doc.rect(marginL, y, contentW, rowH, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(45, 54, 145);
+  doc.text('Project / Activity', marginL + 2, y + 4.8);
+  doc.text('Time', marginL + col1 + 2, y + 4.8);
+  doc.text('Duration', marginL + col1 + col2 + 2, y + 4.8);
+
+  // Header border
+  doc.setDrawColor(204, 204, 204);
+  doc.setLineWidth(0.2);
+  doc.rect(marginL, y, contentW, rowH, 'S');
+  doc.line(marginL + col1, y, marginL + col1, y + rowH);
+  doc.line(marginL + col1 + col2, y, marginL + col1 + col2, y + rowH);
+  y += rowH;
+
+  // Data rows
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
   for (var i = 0; i < entries.length; i++) {
     var e = entries[i];
-    var shade = i % 2 === 0 ? 'FFFFFF' : 'F2F2F2';
+    var shade = i % 2 === 0;
+    if (!shade) { doc.setFillColor(242, 242, 242); doc.rect(marginL, y, contentW, rowH, 'F'); }
+    doc.setTextColor(68, 68, 68);
+    var label = e.label || '';
     var timeStr = (e.start && e.end) ? (fmtTime(e.start) + ' to ' + fmtTime(e.end)) : (e.start || '');
-    var durStr  = (e.dur !== null && e.dur > 0) ? minsToLabel(e.dur) : '';
-    if (e.dur !== null && e.dur > 0) totalMins += e.dur;
-    dataRows.push(new D.TableRow({ children: [dCell(e.label || '', 5500, shade), dCell(timeStr, 2600, shade), dCell(durStr, 1538, shade)] }));
+    var durStr = (e.dur !== null && e.dur > 0) ? minsToLabel(e.dur) : '';
+    doc.text(label, marginL + 2, y + 4.8);
+    doc.text(timeStr, marginL + col1 + 2, y + 4.8);
+    doc.text(durStr, marginL + col1 + col2 + 2, y + 4.8);
+    doc.setDrawColor(204, 204, 204);
+    doc.setLineWidth(0.2);
+    doc.rect(marginL, y, contentW, rowH, 'S');
+    doc.line(marginL + col1, y, marginL + col1, y + rowH);
+    doc.line(marginL + col1 + col2, y, marginL + col1 + col2, y + rowH);
+    y += rowH;
   }
-  if (dataRows.length === 0) {
-    dataRows.push(new D.TableRow({ children: [dCell('No entries', 5500, 'FFFFFF'), dCell('', 2600, 'FFFFFF'), dCell('', 1538, 'FFFFFF')] }));
+
+  y += 4;
+  // Rule
+  doc.setDrawColor(204, 204, 204);
+  doc.setLineWidth(0.3);
+  doc.line(marginL, y, pageW - marginR, y);
+  y += 6;
+
+  // Prestart
+  if (prestart) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(46, 125, 50);
+    doc.text('+ Prestart meeting attended: +15 min', marginL, y);
+    y += 5;
   }
 
-  var prestartMins = prestart ? 15 : 0;
-  var net = totalMins - 30 + prestartMins;
-  if (net < 0) net = 0;
+  // Total
+  var net = calcNet(entries, prestart);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(45, 54, 145);
+  doc.text('Total Payable Hours: ' + minsToLabel(net), marginL, y);
+  y += 8;
 
-  var summaryParas = [];
-  if (prestart) summaryParas.push(new D.Paragraph({ spacing: { before: 0, after: 60 },
-    children: [new D.TextRun({ text: '+ Prestart meeting attended: +15 min', size: 18, font: 'Arial', color: '2e7d32' })] }));
-  summaryParas.push(new D.Paragraph({ spacing: { before: 60, after: 0 },
-    children: [new D.TextRun({ text: 'Total Payable Hours: ' + minsToLabel(net), bold: true, size: 22, font: 'Arial', color: '2D3691' })] }));
+  // Notes
+  if (notes) {
+    doc.setDrawColor(204, 204, 204);
+    doc.setLineWidth(0.3);
+    doc.line(marginL, y, pageW - marginR, y);
+    y += 6;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(45, 54, 145);
+    doc.text('Notes', marginL, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(68, 68, 68);
+    var noteLines = doc.splitTextToSize(notes, contentW);
+    doc.text(noteLines, marginL, y);
+    y += noteLines.length * 5;
+  }
 
-  var doc = new D.Document({
-    sections: [{
-      properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, right: 1134, bottom: 1134, left: 1134 } } },
-      headers: { default: new D.Header({ children: [new D.Paragraph({
-        border: { bottom: { style: D.BorderStyle.SINGLE, size: 18, color: '29ACE4', space: 1 } },
-        spacing: { after: 60 },
-        tabStops: [{ type: D.TabStopType.RIGHT, position: CONTENT_WIDTH }],
-        children: [
-          new D.ImageRun({ type: 'png', data: logoBytes, transformation: { width: 100, height: 38 }, altText: { title: 'SCC Logo', description: 'SCC', name: 'SCCLogo' } }),
-          new D.TextRun('\t'),
-          new D.TextRun({ text: 'CONFIDENTIAL', bold: true, color: '2D3691', size: 16, font: 'Arial' })
-        ]
-      })] }) },
-      footers: { default: new D.Footer({ children: [new D.Paragraph({
-        border: { top: { style: D.BorderStyle.SINGLE, size: 6, color: 'CCCCCC', space: 1 } },
-        spacing: { before: 60 },
-        tabStops: [{ type: D.TabStopType.RIGHT, position: CONTENT_WIDTH }],
-        children: [
-          new D.TextRun({ text: 'Timesheet', color: '595959', size: 16, font: 'Arial' }),
-          new D.TextRun('\t'),
-          new D.TextRun({ text: 'Page ', color: '595959', size: 16, font: 'Arial' }),
-          new D.TextRun({ children: [D.PageNumber.CURRENT], color: '595959', size: 16, font: 'Arial' })
-        ]
-      })] }) },
-      children: [
-        new D.Paragraph({ spacing: { before: 0, after: 60 },
-          children: [new D.TextRun({ text: 'TIMESHEET', bold: true, size: 28, color: '2D3691', font: 'Arial' })] }),
-        new D.Paragraph({ spacing: { before: 0, after: 60 },
-          children: [new D.TextRun({ text: dateStr, size: 18, color: '595959', font: 'Arial' })] }),
-        new D.Paragraph({ spacing: { before: 0, after: 200 },
-          border: { bottom: { style: D.BorderStyle.SINGLE, size: 6, color: 'CCCCCC', space: 1 } },
-          children: [new D.TextRun('')] }),
-        new D.Table({ width: { size: CONTENT_WIDTH, type: D.WidthType.DXA }, columnWidths: [5500, 2600, 1538],
-          rows: [ new D.TableRow({ children: [hCell('Project / Activity', 5500), hCell('Time', 2600), hCell('Duration', 1538)] }) ].concat(dataRows) }),
-        new D.Paragraph({ spacing: { before: 240, after: 60 },
-          border: { bottom: { style: D.BorderStyle.SINGLE, size: 6, color: 'CCCCCC', space: 1 } },
-          children: [new D.TextRun('')] })
-      ].concat(summaryParas)
-    }]
-  });
+  // Footer rule
+  var footerY = 285;
+  doc.setDrawColor(204, 204, 204);
+  doc.setLineWidth(0.3);
+  doc.line(marginL, footerY, pageW - marginR, footerY);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(89, 89, 89);
+  doc.text('Timesheet', marginL, footerY + 4);
+  doc.text('Page 1', pageW - marginR, footerY + 4, { align: 'right' });
 
-  D.Packer.toBlob(doc).then(function(blob) {
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    var fileDateStr = dateVal ? dateVal.replace(/-/g, '') : 'undated';
-    a.download = 'SCC_Daily_Diary_' + fileDateStr + '.docx';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  });
+  // Save
+  var dateVal = document.getElementById('gdate').value;
+  var fileDateStr = dateVal ? dateVal.replace(/-/g, '') : 'undated';
+  doc.save('SCC_Timesheet_' + fileDateStr + '.pdf');
 }
 
-// Wire up static buttons
+// Wire static events
 document.getElementById('btn-email').addEventListener('click', sendEmail);
-document.getElementById('btn-docx').addEventListener('click', saveDocx);
+document.getElementById('btn-pdf').addEventListener('click', function() { savePDF(false); });
 document.getElementById('prestart').addEventListener('change', updatePreview);
-document.getElementById('gdate').addEventListener('change', function() { applyMaxToAll(); updatePreview(); });
-document.getElementById('gdate').value = new Date().toISOString().split('T')[0];
+document.getElementById('notes').addEventListener('input', updatePreview);
+document.getElementById('gdate').addEventListener('change', function() {
+  // Block future dates
+  var val = document.getElementById('gdate').value;
+  if (val > today()) { document.getElementById('gdate').value = today(); val = today(); }
+  applyMaxToAll();
+  updatePreview();
+});
+
+// Set today and max date
+var t = today();
+document.getElementById('gdate').value = t;
+document.getElementById('gdate').max = t;
 
 // Start with one entry
 addEntry();
