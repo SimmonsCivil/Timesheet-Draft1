@@ -104,7 +104,7 @@ textarea{resize:vertical;min-height:80px;}
   </div>
 
   <div class="actions">
-    <button class="btn-email" id="btn-email">Send via Email</button>
+    <button class="btn-email" id="btn-email">Share Timesheet</button>
     <button class="btn-pdf" id="btn-pdf">Save as PDF</button>
   </div>
 
@@ -471,95 +471,99 @@ function buildEmailBody() {
 
 function sendEmail() {
   if (!allProjectsValid()) return;
-  var body = buildEmailBody();
-  var proj = getFirstProject();
-  var subject = 'Timesheet for ' + (proj || 'SCC');
-  var to = 'timesheets@simmonscivil.com.au';
-  var mailtoHref = 'mailto:' + to + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
-  var gmailHref = 'https://mail.google.com/mail/?view=cm&to=' + encodeURIComponent(to) + '&su=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
 
-  // Trigger PDF download first
-  savePDF(true);
+  try { navigator.clipboard.writeText('timesheets@simmonscivil.com.au'); } catch(e) {}
 
-  // Try mailto — if no mail client is configured on desktop it silently fails
-  // Show a fallback modal after a short delay so desktop users aren't left stranded
-  var a = document.createElement('a');
-  a.href = mailtoHref;
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  var jsPDF = window.jspdf ? window.jspdf.jsPDF : window.jsPDF;
+  if (!jsPDF) { alert('PDF library still loading. Please try again.'); return; }
 
-  // Show fallback modal after 800ms regardless — user can dismiss if mail client opened
-  setTimeout(function() {
-    var ov = document.createElement('div');
-    ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  var entries = getEntries().filter(function(e){ return e.label || e.start || e.end; });
+  var prestart = document.getElementById('prestart').checked;
+  var notes = document.getElementById('notes').value.trim();
+  var dateStr = getDateStr(true);
+  var dateVal = document.getElementById('gdate').value;
+  var fileDateStr = dateVal ? dateVal.replace(/-/g, '') : 'undated';
+  var fileName = 'SCC_Timesheet_' + fileDateStr + '.pdf';
 
-    var box = document.createElement('div');
-    box.style.cssText = 'background:#fff;border-radius:8px;padding:24px;max-width:500px;width:100%;font-family:Arial,sans-serif;';
+  var doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  var pageW = 210, marginL = 20, marginR = 20, contentW = pageW - marginL - marginR;
+  var y = 20;
 
-    var title = document.createElement('div');
-    title.style.cssText = 'font-size:15px;font-weight:bold;color:#2D3691;margin-bottom:4px;';
-    title.textContent = 'Send Timesheet';
+  try { doc.addImage('data:image/png;base64,' + LOGO_B64, 'PNG', marginL, y, 40, 15); } catch(e) {}
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(45, 54, 145);
+  doc.text('CONFIDENTIAL', pageW - marginR, y + 10, { align: 'right' });
+  y += 18;
+  doc.setDrawColor(41, 172, 228); doc.setLineWidth(0.8); doc.line(marginL, y, pageW - marginR, y); y += 8;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(45, 54, 145);
+  doc.text('TIMESHEET', marginL, y); y += 6;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(89, 89, 89);
+  doc.text(dateStr || 'Date not set', marginL, y); y += 3;
+  doc.setDrawColor(204, 204, 204); doc.setLineWidth(0.3); doc.line(marginL, y + 2, pageW - marginR, y + 2); y += 8;
 
-    var sub = document.createElement('div');
-    sub.style.cssText = 'font-size:12px;color:#595959;margin-bottom:4px;';
-    sub.textContent = 'To: ' + to;
+  var col1 = contentW * 0.54, col2 = contentW * 0.26, col3 = contentW * 0.20;
+  var rowH = 7;
+  doc.setFillColor(214, 238, 249); doc.rect(marginL, y, contentW, rowH, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(45, 54, 145);
+  doc.text('Project / Activity', marginL + 2, y + 4.8);
+  doc.text('Time', marginL + col1 + 2, y + 4.8);
+  doc.text('Duration', marginL + col1 + col2 + 2, y + 4.8);
+  doc.setDrawColor(204, 204, 204); doc.setLineWidth(0.2); doc.rect(marginL, y, contentW, rowH, 'S');
+  doc.line(marginL + col1, y, marginL + col1, y + rowH);
+  doc.line(marginL + col1 + col2, y, marginL + col1 + col2, y + rowH);
+  y += rowH;
 
-    var subj = document.createElement('div');
-    subj.style.cssText = 'font-size:12px;color:#595959;margin-bottom:12px;';
-    subj.textContent = 'Subject: ' + subject;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+  for (var i = 0; i < entries.length; i++) {
+    var e = entries[i];
+    if (i % 2 !== 0) { doc.setFillColor(242, 242, 242); doc.rect(marginL, y, contentW, rowH, 'F'); }
+    doc.setTextColor(68, 68, 68);
+    var timeStr = (e.start && e.end) ? (fmtTime(e.start) + ' to ' + fmtTime(e.end)) : (e.start || '');
+    var durStr = (e.dur !== null && e.dur > 0) ? minsToLabel(e.dur) : '';
+    doc.text(e.label || '', marginL + 2, y + 4.8);
+    doc.text(timeStr, marginL + col1 + 2, y + 4.8);
+    doc.text(durStr, marginL + col1 + col2 + 2, y + 4.8);
+    doc.setDrawColor(204, 204, 204); doc.setLineWidth(0.2); doc.rect(marginL, y, contentW, rowH, 'S');
+    doc.line(marginL + col1, y, marginL + col1, y + rowH);
+    doc.line(marginL + col1 + col2, y, marginL + col1 + col2, y + rowH);
+    y += rowH;
+  }
 
-    var hint = document.createElement('div');
-    hint.style.cssText = 'font-size:12px;color:#595959;margin-bottom:10px;';
-    hint.textContent = 'If your mail app opened, you can close this. Otherwise use one of the options below.';
+  y += 4;
+  doc.setDrawColor(204, 204, 204); doc.setLineWidth(0.3); doc.line(marginL, y, pageW - marginR, y); y += 6;
+  if (prestart) {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(46, 125, 50);
+    doc.text('+ Prestart meeting attended: +15 min', marginL, y); y += 5;
+  }
+  var net = calcNet(entries, prestart);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(45, 54, 145);
+  doc.text('Total Payable Hours: ' + minsToLabel(net), marginL, y); y += 8;
+  if (notes) {
+    doc.setDrawColor(204, 204, 204); doc.setLineWidth(0.3); doc.line(marginL, y, pageW - marginR, y); y += 6;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(45, 54, 145);
+    doc.text('Notes', marginL, y); y += 5;
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(68, 68, 68);
+    var noteLines = doc.splitTextToSize(notes, contentW);
+    doc.text(noteLines, marginL, y);
+  }
+  var footerY = 285;
+  doc.setDrawColor(204, 204, 204); doc.setLineWidth(0.3); doc.line(marginL, footerY, pageW - marginR, footerY);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(89, 89, 89);
+  doc.text('Timesheet', marginL, footerY + 4);
+  doc.text('Page 1', pageW - marginR, footerY + 4, { align: 'right' });
 
-    var btnRow = document.createElement('div');
-    btnRow.style.cssText = 'display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;';
+  var pdfBlob = doc.output('blob');
+  var file = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
-    var btnMail = document.createElement('a');
-    btnMail.href = mailtoHref;
-    btnMail.style.cssText = 'flex:1;min-width:120px;background:#2D3691;color:#fff;border:none;border-radius:5px;padding:10px;text-align:center;font-size:13px;font-weight:bold;text-decoration:none;display:block;';
-    btnMail.textContent = 'Open Mail App';
-
-    var btnGmail = document.createElement('a');
-    btnGmail.href = gmailHref;
-    btnGmail.target = '_blank';
-    btnGmail.style.cssText = 'flex:1;min-width:120px;background:#fff;color:#2D3691;border:2px solid #2D3691;border-radius:5px;padding:10px;text-align:center;font-size:13px;font-weight:bold;text-decoration:none;display:block;';
-    btnGmail.textContent = 'Open in Gmail';
-
-    var ta = document.createElement('textarea');
-    ta.value = body;
-    ta.readOnly = true;
-    ta.style.cssText = 'width:100%;height:130px;border:1px solid #ccc;border-radius:4px;padding:8px;font-size:11px;font-family:Arial,sans-serif;color:#444;background:#fafafa;resize:none;margin-bottom:8px;';
-
-    var copyBtn = document.createElement('button');
-    copyBtn.textContent = 'Copy body text';
-    copyBtn.style.cssText = 'width:100%;background:#f0f2f8;border:1px solid #ccc;border-radius:5px;padding:8px;font-size:12px;cursor:pointer;margin-bottom:10px;';
-    copyBtn.addEventListener('click', function() {
-      ta.select();
-      try { document.execCommand('copy'); copyBtn.textContent = 'Copied!'; setTimeout(function(){ copyBtn.textContent = 'Copy body text'; }, 2000); } catch(e) {}
-    });
-
-    var closeBtn = document.createElement('button');
-    closeBtn.textContent = 'Close';
-    closeBtn.style.cssText = 'width:100%;background:#fff;color:#595959;border:1px solid #ccc;border-radius:5px;padding:8px;font-size:12px;cursor:pointer;';
-    closeBtn.addEventListener('click', function() { document.body.removeChild(ov); });
-
-    btnRow.appendChild(btnMail);
-    btnRow.appendChild(btnGmail);
-    box.appendChild(title);
-    box.appendChild(sub);
-    box.appendChild(subj);
-    box.appendChild(hint);
-    box.appendChild(btnRow);
-    box.appendChild(ta);
-    box.appendChild(copyBtn);
-    box.appendChild(closeBtn);
-    ov.appendChild(box);
-    ov.addEventListener('click', function(e) { if (e.target === ov) document.body.removeChild(ov); });
-    document.body.appendChild(ov);
-  }, 800);
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    navigator.share({ files: [file], title: fileName })
+      .catch(function(err) { if (err.name !== 'AbortError') alert('Share failed: ' + err.message); });
+  } else if (navigator.share) {
+    navigator.share({ title: fileName, text: buildEmailBody() })
+      .catch(function(err) { if (err.name !== 'AbortError') alert('Share failed: ' + err.message); });
+  } else {
+    doc.save(fileName);
+    alert('Email address copied: timesheets@simmonscivil.com.au');
+  }
 }
 
 function savePDF(silent) {
