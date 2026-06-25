@@ -474,14 +474,92 @@ function sendEmail() {
   var body = buildEmailBody();
   var proj = getFirstProject();
   var subject = 'Timesheet for ' + (proj || 'SCC');
-  // First trigger PDF download
+  var to = 'timesheets@simmonscivil.com.au';
+  var mailtoHref = 'mailto:' + to + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  var gmailHref = 'https://mail.google.com/mail/?view=cm&to=' + encodeURIComponent(to) + '&su=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+
+  // Trigger PDF download first
   savePDF(true);
-  // Then open mail client after short delay to allow PDF to initiate
+
+  // Try mailto — if no mail client is configured on desktop it silently fails
+  // Show a fallback modal after a short delay so desktop users aren't left stranded
+  var a = document.createElement('a');
+  a.href = mailtoHref;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  // Show fallback modal after 800ms regardless — user can dismiss if mail client opened
   setTimeout(function() {
-    window.location.href = 'mailto:timesheets@simmonscivil.com.au'
-      + '?subject=' + encodeURIComponent(subject)
-      + '&body=' + encodeURIComponent(body);
-  }, 500);
+    var ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+    var box = document.createElement('div');
+    box.style.cssText = 'background:#fff;border-radius:8px;padding:24px;max-width:500px;width:100%;font-family:Arial,sans-serif;';
+
+    var title = document.createElement('div');
+    title.style.cssText = 'font-size:15px;font-weight:bold;color:#2D3691;margin-bottom:4px;';
+    title.textContent = 'Send Timesheet';
+
+    var sub = document.createElement('div');
+    sub.style.cssText = 'font-size:12px;color:#595959;margin-bottom:4px;';
+    sub.textContent = 'To: ' + to;
+
+    var subj = document.createElement('div');
+    subj.style.cssText = 'font-size:12px;color:#595959;margin-bottom:12px;';
+    subj.textContent = 'Subject: ' + subject;
+
+    var hint = document.createElement('div');
+    hint.style.cssText = 'font-size:12px;color:#595959;margin-bottom:10px;';
+    hint.textContent = 'If your mail app opened, you can close this. Otherwise use one of the options below.';
+
+    var btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;';
+
+    var btnMail = document.createElement('a');
+    btnMail.href = mailtoHref;
+    btnMail.style.cssText = 'flex:1;min-width:120px;background:#2D3691;color:#fff;border:none;border-radius:5px;padding:10px;text-align:center;font-size:13px;font-weight:bold;text-decoration:none;display:block;';
+    btnMail.textContent = 'Open Mail App';
+
+    var btnGmail = document.createElement('a');
+    btnGmail.href = gmailHref;
+    btnGmail.target = '_blank';
+    btnGmail.style.cssText = 'flex:1;min-width:120px;background:#fff;color:#2D3691;border:2px solid #2D3691;border-radius:5px;padding:10px;text-align:center;font-size:13px;font-weight:bold;text-decoration:none;display:block;';
+    btnGmail.textContent = 'Open in Gmail';
+
+    var ta = document.createElement('textarea');
+    ta.value = body;
+    ta.readOnly = true;
+    ta.style.cssText = 'width:100%;height:130px;border:1px solid #ccc;border-radius:4px;padding:8px;font-size:11px;font-family:Arial,sans-serif;color:#444;background:#fafafa;resize:none;margin-bottom:8px;';
+
+    var copyBtn = document.createElement('button');
+    copyBtn.textContent = 'Copy body text';
+    copyBtn.style.cssText = 'width:100%;background:#f0f2f8;border:1px solid #ccc;border-radius:5px;padding:8px;font-size:12px;cursor:pointer;margin-bottom:10px;';
+    copyBtn.addEventListener('click', function() {
+      ta.select();
+      try { document.execCommand('copy'); copyBtn.textContent = 'Copied!'; setTimeout(function(){ copyBtn.textContent = 'Copy body text'; }, 2000); } catch(e) {}
+    });
+
+    var closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Close';
+    closeBtn.style.cssText = 'width:100%;background:#fff;color:#595959;border:1px solid #ccc;border-radius:5px;padding:8px;font-size:12px;cursor:pointer;';
+    closeBtn.addEventListener('click', function() { document.body.removeChild(ov); });
+
+    btnRow.appendChild(btnMail);
+    btnRow.appendChild(btnGmail);
+    box.appendChild(title);
+    box.appendChild(sub);
+    box.appendChild(subj);
+    box.appendChild(hint);
+    box.appendChild(btnRow);
+    box.appendChild(ta);
+    box.appendChild(copyBtn);
+    box.appendChild(closeBtn);
+    ov.appendChild(box);
+    ov.addEventListener('click', function(e) { if (e.target === ov) document.body.removeChild(ov); });
+    document.body.appendChild(ov);
+  }, 800);
 }
 
 function savePDF(silent) {
